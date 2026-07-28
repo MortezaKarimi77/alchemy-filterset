@@ -6,7 +6,17 @@ A powerful, dynamic, and type-safe filtering architecture for **SQLAlchemy 2.0**
 
 While SQLAlchemy and Advanced Alchemy provide excellent tools for querying databases, handling complex HTTP query parameters (like nested relationships, dynamic ordering, and multi-field search) often leads to messy, repetitive, and hard-to-maintain code.
 
-`alchemy-filterset` bridges the gap between your Web Framework (FastAPI, Litestar, etc.) and your Database by providing a declarative, Pydantic-powered filter class that securely translates user requests into highly optimized SQL `EXISTS` subqueries.
+`alchemy-filterset` bridges the gap between your Web Framework (FastAPI, Litestar, etc.) and your Database by providing a declarative, Pydantic-powered filter class that securely translates user requests into efficient SQL `EXISTS` expressions.
+
+## Design Goals
+
+Alchemy FilterSet is designed around a few core principles:
+
+- Declarative API inspired by Django FilterSet while remaining SQLAlchemy-native.
+- No automatic joins; relationship filters are translated into EXISTS expressions.
+- Type-safe query parsing powered by Pydantic v2.
+- Extensible lookup registry for custom operators.
+- Framework agnostic (FastAPI, Litestar, Starlette, etc.).
 
 ## Key Features
 
@@ -136,7 +146,7 @@ class CityFilter(SQLAlchemyFilterSet):
     province__country__name__icontains: str | None = None
 ```
 
-Under the hood, this generates highly optimized SQL `EXISTS` queries using SQLAlchemy's `.has()` and `.any()`.
+Under the hood, this generates efficient SQL `EXISTS` queries using SQLAlchemy's `.has()` and `.any()`.
 
 ### 4. Global Search
 
