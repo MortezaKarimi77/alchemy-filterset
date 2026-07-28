@@ -37,9 +37,8 @@ This package requires Python 3.10+ and SQLAlchemy 2.0+.
 ```bash
 pip install alchemy-filterset
 uv add alchemy-filterset
+poetry add alchemy-filterset
 ```
-
-*(Or use `uv add alchemy-filterset` / `poetry add alchemy-filterset`)*
 
 ---
 
