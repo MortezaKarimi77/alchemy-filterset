@@ -1,0 +1,59 @@
+[project]
+name = "alchemy-filterset"
+version = "0.1.0"
+description = "A dynamic, Django-like filterset architecture for SQLAlchemy & Advanced Alchemy."
+readme = "README.md"
+authors = [{ name = "Morteza Karimi", email = "itismortezakarimi@gmail.com" }]
+requires-python = ">=3.12"
+license = { text = "MIT" }
+keywords = [
+    "sqlalchemy",
+    "advanced-alchemy",
+    "litestar",
+    "fastapi",
+    "filters",
+    "pydantic",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "advanced-alchemy>=1.11.0",
+    "pydantic>=2.13.4",
+    "sqlalchemy>=2.0.51",
+]
+
+[dependency-groups]
+test = ["pytest>=9.1.1", "pytest-cov>=7.1.0"]
+
+[project.urls]
+Homepage = "https://github.com/MortezaKarimi77/alchemy-filterset"
+Repository = "https://github.com/MortezaKarimi77/alchemy-filterset.git"
+Issues = "https://github.com/MortezaKarimi77/alchemy-filterset/issues"
+
+[build-system]
+requires = ["uv_build>=0.11.32,<0.12.0"]
+build-backend = "uv_build"
+
+
+[tool.pytest.ini_options]
+xfail_strict = true
+testpaths = "tests"
+addopts = ["--strict-config", "--strict-markers", "-s", "-v", "-ra"]
+
+[tool.coverage.run]
+branch = true
+source = ["alchemy_filterset"]
+
+[tool.coverage.paths]
+source = ["src/alchemy_filterset", "*/site-packages/alchemy_filterset"]
