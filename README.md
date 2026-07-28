@@ -1,6 +1,6 @@
 # Alchemy FilterSet 🚀
 
-A powerful, dynamic, and type-safe filtering architecture for **SQLAlchemy 2.0** and **Advanced Alchemy**, heavily inspired by `django-filters`.
+A powerful, dynamic, and type-safe filtering architecture for **SQLAlchemy 2.0** and **Advanced Alchemy**, inspired by `django-filters`.
 
 ## Why Alchemy FilterSet?
 
