@@ -81,7 +81,11 @@ class SQLAlchemyFilterSet(pyd.BaseModel):
             sort_order = "desc" if field.startswith("-") else "asc"
             clean_path = field.strip("+-")
 
-            resolved = RelationshipResolver.resolve(self.model_cls, clean_path)
+            try:
+                resolved = RelationshipResolver.resolve(self.model_cls, clean_path)
+            except exceptions.RelationshipResolverError:
+                continue
+
             if (target_attribute := resolved.target_attribute) is not None:
                 if isinstance(target_attribute, AssociationProxyInstance):
                     target_attribute = target_attribute.remote_attr
@@ -125,7 +129,7 @@ class SQLAlchemyFilterSet(pyd.BaseModel):
 
             if custom_filter_method := getattr(self, f"filter_{key}", None):
                 if (cond := custom_filter_method(value)) is not None:
-                    conditions.append(cond)
+                    conditions.append(~cond if is_negated else cond)
                 continue
 
             parts = key.split("__")
@@ -137,10 +141,8 @@ class SQLAlchemyFilterSet(pyd.BaseModel):
             clean_path = "__".join(parts)
 
             cond = self._build_single_condition(clean_path, lookup, value)
-            if is_negated:
-                cond = ~cond
+            conditions.append(~cond if is_negated else cond)
 
-            conditions.append(cond)
         return conditions
 
     def _build_single_condition(self, path: str, lookup: str, value: tp.Any) -> ColumnElement[bool]:

@@ -16,6 +16,7 @@ class CityFilterSet(SQLAlchemyFilterSet):
     not__province__country__code: str | None = None
 
     has_metro: bool | None = None
+    not__has_metro: bool | None = None
 
     def filter_has_metro(self, value: bool):
         if value:
@@ -91,6 +92,15 @@ class TestFilterSet:
             ordering_filters[1].sort_order == "asc",
         ))
 
+    def test_ordering_ignores_invalid_field(self) -> None:
+        filterset = CityFilterSet(ordering="name,invalid_field,-population")
+        stmt_filters = filterset.to_statement_filters()
+        ordering_filters = [field for field in stmt_filters if isinstance(field, filters.OrderBy)]
+
+        assert len(ordering_filters) == 2
+        assert ordering_filters[0].field_name is City.name
+        assert ordering_filters[1].field_name is City.population
+
     def test_empty_search_and_ordering(self) -> None:
         filterset = CityFilterSet(search="   ", ordering="  ")
         assert all((filterset._build_search_filter() is None, filterset._build_ordering_filters() is None))
@@ -129,3 +139,19 @@ class TestFilterSet:
 
         assert "NOT EXISTS" in compiled or "NOT (EXISTS" in compiled
         assert "IR" in compiled
+
+    def test_negation_custom_method_true(self) -> None:
+        filterset = CityFilterSet(not__has_metro=True)
+        exprs = filterset._build_field_filters()
+        compiled = str(exprs[0].compile(compile_kwargs={"literal_binds": True}))
+
+        assert len(exprs) == 1
+        assert "population <= 1000000" in compiled or "NOT (city.population > 1000000)" in compiled
+
+    def test_negation_custom_method_false(self) -> None:
+        filterset = CityFilterSet(not__has_metro=False)
+        exprs = filterset._build_field_filters()
+        compiled = str(exprs[0].compile(compile_kwargs={"literal_binds": True}))
+
+        assert len(exprs) == 1
+        assert "population > 1000000" in compiled or "NOT (city.population <= 1000000)" in compiled
