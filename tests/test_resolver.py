@@ -5,7 +5,7 @@ import sqlalchemy.orm as so
 
 from alchemy_filterset.exceptions import AttributeNotFoundError, RelationshipResolverError
 from alchemy_filterset.resolver import RelationshipResolver
-from tests.conftest import City, Country, Province, Tag
+from tests.conftest import City, CityTag, Country, Province, Tag
 
 
 class TestRelationshipResolver:
@@ -94,6 +94,32 @@ class TestRelationshipResolver:
         assert len(resolved.relationship_chain) == relationship_length
 
     @pytest.mark.parametrize(
+        argnames=("model", "target_attribute", "path", "target_collection"),
+        argvalues=(
+            (City, CityTag.tag_id, "tag_ids", "city_tags"),
+            (Tag, CityTag.city_id, "city_ids", "city_tags"),
+        ),
+    )
+    def test_resolve_association_proxy_to_scalar_column(
+        self,
+        model: type[so.DeclarativeBase],
+        target_attribute: so.InstrumentedAttribute[tp.Any],
+        path: str,
+        target_collection: str,
+    ) -> None:
+        resolved = RelationshipResolver.resolve(model, path)
+
+        assert resolved.is_nested is True
+        assert resolved.target_attribute is target_attribute
+        assert len(resolved.relationship_chain) == 1
+        assert resolved.relationship_chain[0][0].key == target_collection
+        assert resolved.relationship_chain[0][1] is True  # uselist=True
+
+    def test_resolve_invalid_field_after_association_proxy(self) -> None:
+        with pytest.raises(AttributeNotFoundError):
+            RelationshipResolver.resolve(City, "tags__non_existent_field")
+
+    @pytest.mark.parametrize(
         argnames=("model", "target_attribute", "path", "attribute_name", "relationship_length"),
         argvalues=(
             (Country, City.population, ("provinces", "cities", "population"), "population", 2),
@@ -117,12 +143,12 @@ class TestRelationshipResolver:
         assert len(resolved.relationship_chain) == relationship_length
 
     @pytest.mark.parametrize(
-        argnames=("model", "target_attribute", "path", "attribute_name", "relationship_length"),
+        argnames=("model", "target_attribute", "path", "attribute_name", "relationship_length", "expected_is_nested"),
         argvalues=(
-            (Country, Province.cities, "provinces__cities", "cities", 2),
-            (Province, Province.country, "country", "country", 1),
-            (Province, Province.cities, "cities", "cities", 1),
-            (City, Province.country, "province__country", "country", 2),
+            (Country, Province.cities, "provinces__cities", "cities", 1, True),
+            (Province, Province.country, "country", "country", 0, False),
+            (Province, Province.cities, "cities", "cities", 0, False),
+            (City, Province.country, "province__country", "country", 1, True),
         ),
     )
     def test_resolve_path_ending_in_relationship(
@@ -131,10 +157,11 @@ class TestRelationshipResolver:
         target_attribute: so.InstrumentedAttribute[tp.Any],
         path: str,
         attribute_name: str,
+        expected_is_nested: bool,
         relationship_length: int,
     ) -> None:
         resolved = RelationshipResolver.resolve(model, path)
-        assert resolved.is_nested is True
+        assert resolved.is_nested is expected_is_nested
         assert resolved.target_attribute is target_attribute
         assert resolved.attribute_name == attribute_name
         assert len(resolved.relationship_chain) == relationship_length

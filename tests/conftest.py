@@ -110,6 +110,10 @@ class City(Base):
         target_collection="city_tags",
         attr="tag",
     )
+    tag_ids: AssociationProxy[list[int]] = association_proxy(
+        target_collection="city_tags",
+        attr="tag_id",
+    )
 
 
 class Tag(Base):
@@ -133,6 +137,10 @@ class Tag(Base):
     cities: AssociationProxy[list["City"]] = association_proxy(
         target_collection="city_tags",
         attr="city",
+    )
+    city_ids: AssociationProxy[list[int]] = association_proxy(
+        target_collection="city_tags",
+        attr="city_id",
     )
 
 

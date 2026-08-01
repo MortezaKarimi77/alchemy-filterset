@@ -42,6 +42,15 @@ class RelationshipResolver:
                 raise exceptions.AttributeNotFoundError(current_model, part)
 
             if cls._is_relationship(attribute):
+                if index == len(parts) - 1:
+                    return ResolvedPath(
+                        root_model=root_model,
+                        target_model=current_model,
+                        target_attribute=attribute,
+                        attribute_name=part,
+                        relationship_chain=relationship_chain,
+                    )
+
                 uselist = attribute.property.uselist
                 relationship_chain.append((attribute, uselist))
                 current_model = attribute.property.mapper.class_
@@ -59,7 +68,7 @@ class RelationshipResolver:
                     return ResolvedPath(
                         root_model=root_model,
                         target_model=local_attr.property.mapper.class_,
-                        target_attribute=attribute,
+                        target_attribute=remote_attr,
                         attribute_name=part,
                         relationship_chain=relationship_chain,
                         remaining_parts=remaining_parts,
