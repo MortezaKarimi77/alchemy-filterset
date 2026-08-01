@@ -13,7 +13,7 @@ While SQLAlchemy and Advanced Alchemy provide excellent tools for querying datab
 Alchemy FilterSet is designed around a few core principles:
 
 - Declarative API inspired by Django FilterSet while remaining SQLAlchemy-native.
-- No automatic joins; relationship filters are translated into EXISTS expressions.
+- No automatic joins; relationship **filters** are translated into `EXISTS` expressions instead. **Ordering** is the one exception — see [Dynamic Ordering](#5-dynamic-ordering).
 - Type-safe query parsing powered by Pydantic v2.
 - Extensible lookup registry for custom operators.
 - Framework agnostic (FastAPI, Litestar, Starlette, etc.).
@@ -21,11 +21,11 @@ Alchemy FilterSet is designed around a few core principles:
 ## Key Features
 
 - 🔗 **Deep Nested Relationships:** Seamlessly filter across infinite layers of relationships (e.g., `province__country__name__icontains="Iran"`).
-- 🚫 **Negation Support:** Easily exclude records using the `not__` prefix (e.g., `not__status="deleted"`).
+- 🚫 **Negation Support:** Easily exclude records using the `not__` prefix (e.g., `not__status="deleted"`) — works uniformly on standard lookups, nested relationships, and custom `filter_<field>` methods.
 - 🗂 **Smart Pagination:** Built-in, declarative pagination controls with frontend limits and backend enforcement.
-- 🔍 **Global Multi-Field Search:** Search across multiple columns and related tables simultaneously with a single `?search=` parameter.
-- ↕️ **Dynamic Ordering:** Sort by any field or nested relationship (e.g., `?ordering=-province__name,created_at`).
-- 🧩 **Association Proxy Support:** Fully supports querying and ordering across SQLAlchemy's `AssociationProxy`.
+- 🔍 **Global Multi-Field Search:** Search across multiple columns and related tables simultaneously with a single `?search=` parameter. Unknown field names in `search_fields` are ignored rather than raising an error.
+- ↕️ **Dynamic Ordering:** Sort by any direct field, or by a nested relationship if you join the related table yourself (e.g., `?ordering=-province__name,created_at`) — see [Dynamic Ordering](#5-dynamic-ordering).
+- 🧩 **Association Proxy Support:** Query and order through SQLAlchemy's `AssociationProxy`, whether it points to another model or straight to a scalar column.
 - 🛡 **Type-Safe:** Built with Pydantic v2 and Python 3.10+ types.
 
 ---
@@ -131,6 +131,16 @@ class UserFilter(SQLAlchemyFilterSet):
     
     # Nested Negation (Users who DO NOT have a specific role)
     not__roles__name__icontains: str | None = None
+
+    # Negation also works on custom filter_<field> methods (see #7 below) —
+    # the condition the method returns is inverted, whatever it is.
+    has_avatar: bool | None = None
+    not__has_avatar: bool | None = None
+
+    def filter_has_avatar(self, value: bool):
+        if value:
+            return User.avatar_url.is_not(None)
+        return User.avatar_url.is_(None)
 ```
 
 ### 3. Deep Nested Relationships (The Magic ✨)
@@ -145,7 +155,7 @@ class CityFilter(SQLAlchemyFilterSet):
     province__country__name__icontains: str | None = None
 ```
 
-Under the hood, this generates efficient SQL `EXISTS` queries using SQLAlchemy's `.has()` and `.any()`.
+Under the hood, this generates efficient SQL `EXISTS` queries using SQLAlchemy's `.has()` and `.any()` — no `JOIN` required, regardless of how deep the chain goes.
 
 ### 4. Global Search
 
@@ -159,11 +169,30 @@ class PostFilter(SQLAlchemyFilterSet):
 
 `GET /api/posts?search=python` will search for "python" in the title, content, OR the author's username.
 
+A misconfigured or renamed field in `search_fields` won't raise an error — it's silently skipped, and the remaining valid fields are still searched.
+
 ### 5. Dynamic Ordering
 
 Users can sort results using the `ordering` parameter. Prefix with `-` for descending order. Separate multiple fields with commas.
 
 `GET /api/users?ordering=-created_at,last_name`
+
+You can also order by a field on a related model:
+
+`GET /api/cities?ordering=-province__name,created_at`
+
+> ⚠️ **Nested ordering requires you to add the JOIN yourself.** Filtering across relationships uses a correlated `EXISTS` subquery, which never needs a `JOIN` — but SQL's `ORDER BY` does. In line with this library's "no automatic joins" design goal, `alchemy-filterset` does **not** add that join for you. If you order by a nested field (or an `AssociationProxy` that points across a relationship) without joining the related table into your base query, the database will raise an error, since the referenced table won't be in the query's `FROM`/`JOIN` clause.
+>
+> Add the join yourself and pass the resulting statement as the base query, e.g. via Advanced Alchemy's `statement` parameter:
+>
+> ```python
+> from sqlalchemy import select
+>
+> base_statement = select(City).join(City.province)
+> cities = await repo.list(*filters.to_statement_filters(), statement=base_statement)
+> ```
+>
+> Unknown or misspelled field names passed in `ordering` are silently ignored rather than raising an error.
 
 ### 6. Pagination Control
 
@@ -203,24 +232,31 @@ class UserFilter(SQLAlchemyFilterSet):
         return User.avatar_url.is_(None)
 ```
 
+If the method returns `None`, no condition is added for that field — useful for a value that means "don't filter on this at all."
+
+Custom filter methods also honor the `not__` prefix (see [Negation](#2-negation--exclude-the-not__-prefix)); whatever condition your method returns gets inverted.
+
 ---
 
 ## 🛠 Advanced Usage: Association Proxies
 
-`alchemy-filterset` natively supports SQLAlchemy's `AssociationProxy`. It automatically unpacks the proxy, discovers the underlying tables, and applies the filters or ordering correctly without crashing.
+`alchemy-filterset` natively supports SQLAlchemy's `AssociationProxy`, whether it proxies to another mapped model or straight to a plain column on the far side of the relationship.
 
 ```python
 class Post(Base):
     __tablename__ = "posts"
     # ...
-    # Association proxy to tags
+    # Association proxy straight to a scalar column
     tags: AssociationProxy[list[str]] = association_proxy("post_tags", "tag_name")
 
 class PostFilter(SQLAlchemyFilterSet):
     model_cls = Post
-    # Works perfectly!
     tags__icontains: str | None = None
 ```
+
+This resolves to the real `tag_name` column and compiles into an `EXISTS` over `post_tags` — the same `.any()`/`.has()` approach used for ordinary nested relationships, so it works without a `JOIN`.
+
+Ordering by an `AssociationProxy` is also supported, but since it still traverses a relationship under the hood, it's subject to the same rule as any nested field: you need to join the related table yourself (see [Dynamic Ordering](#5-dynamic-ordering)).
 
 ## License
 
