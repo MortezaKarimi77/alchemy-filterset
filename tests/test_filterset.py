@@ -1,3 +1,4 @@
+import pytest
 from advanced_alchemy import filters
 
 from alchemy_filterset.filterset import SQLAlchemyFilterSet
@@ -11,6 +12,7 @@ class CityFilterSet(SQLAlchemyFilterSet):
     name__icontains: str | None = None
     population__gt: int | None = None
     province__country__code: str | None = None
+    tags__name__icontains: str | None = None
 
     not__population__gt: int | None = None
     not__province__country__code: str | None = None
@@ -27,6 +29,21 @@ class CityFilterSet(SQLAlchemyFilterSet):
 class NoPaginationCityFilterSet(SQLAlchemyFilterSet):
     model_cls = City
     enable_pagination = False
+
+
+class BadSearchFilterSet(SQLAlchemyFilterSet):
+    model_cls = City
+    search_fields = ("name", "does_not_exist")
+
+
+class ConditionalCustomFilterSet(SQLAlchemyFilterSet):
+    model_cls = City
+    only_large: bool | None = None
+
+    def filter_only_large(self, value: bool):
+        if not value:
+            return None
+        return City.population > 1000000
 
 
 class TestFilterSet:
@@ -62,6 +79,15 @@ class TestFilterSet:
             "lower(CAST(province.name AS VARCHAR)) LIKE lower('%Tehran%')" in compiled,
         ))
 
+    def test_search_ignores_invalid_search_field(self) -> None:
+        filterset = BadSearchFilterSet(search="Tehran")
+        search_expr = filterset._build_search_filter()
+
+        assert search_expr is not None
+        compiled = str(search_expr.compile(compile_kwargs={"literal_binds": True}))
+        assert "lower(CAST(city.name AS VARCHAR)) LIKE lower('%Tehran%')" in compiled
+        assert " OR " not in compiled
+
     def test_nested_relationship_filtering(self) -> None:
         filterset = CityFilterSet(province__country__code="IR")
         exprs = filterset._build_field_filters()
@@ -70,6 +96,15 @@ class TestFilterSet:
         compiled = str(exprs[0].compile(compile_kwargs={"literal_binds": True}))
         assert all(("EXISTS" in compiled, "IR" in compiled))
 
+    def test_filtering_through_collection_relationship(self) -> None:
+        filterset = CityFilterSet(tags__name__icontains="capital")
+        exprs = filterset._build_field_filters()
+
+        assert len(exprs) == 1
+        compiled = str(exprs[0].compile(compile_kwargs={"literal_binds": True}))
+        assert "EXISTS" in compiled
+        assert "capital" in compiled
+
     def test_custom_filter_method(self) -> None:
         filterset = CityFilterSet(has_metro=True)
         exprs = filterset._build_field_filters()
@@ -77,6 +112,10 @@ class TestFilterSet:
         assert len(exprs) == 1
         compiled = str(exprs[0].compile(compile_kwargs={"literal_binds": True}))
         assert "population > 1000000" in compiled
+
+    def test_custom_filter_method_returning_none_adds_no_condition(self) -> None:
+        filterset = ConditionalCustomFilterSet(only_large=False)
+        assert filterset._build_field_filters() == []
 
     def test_ordering_parsing(self) -> None:
         filterset = CityFilterSet(ordering="-population,province__name")
@@ -121,6 +160,13 @@ class TestFilterSet:
 
         sql_exprs = [filter for filter in stmt_filters if hasattr(filter, "compile")]
         assert len(sql_exprs) > 0
+
+    def test_to_statement_filters_without_model_cls_raises(self) -> None:
+        class BrokenFilterSet(SQLAlchemyFilterSet):
+            pass
+
+        with pytest.raises(ValueError, match="model_cls"):
+            BrokenFilterSet().to_statement_filters()
 
     def test_negation_simple_field(self) -> None:
         filterset = CityFilterSet(not__population__gt=1000000)

@@ -3,7 +3,6 @@ import typing as tp
 import pydantic as pyd
 from advanced_alchemy import filters
 from sqlalchemy import ColumnElement, or_
-from sqlalchemy.ext.associationproxy import AssociationProxyInstance
 from sqlalchemy.orm import DeclarativeBase
 
 from . import exceptions
@@ -86,12 +85,8 @@ class SQLAlchemyFilterSet(pyd.BaseModel):
             except exceptions.RelationshipResolverError:
                 continue
 
-            if (target_attribute := resolved.target_attribute) is not None:
-                if isinstance(target_attribute, AssociationProxyInstance):
-                    target_attribute = target_attribute.remote_attr
-
-                field_to_order = tp.cast(tp.Any, target_attribute)
-                ordering_filters.append(filters.OrderBy(field_name=field_to_order, sort_order=sort_order))
+            field_to_order = tp.cast(tp.Any, resolved.target_attribute)
+            ordering_filters.append(filters.OrderBy(field_name=field_to_order, sort_order=sort_order))
 
         return ordering_filters if ordering_filters else None
 
