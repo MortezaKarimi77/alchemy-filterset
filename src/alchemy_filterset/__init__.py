@@ -1,7 +1,11 @@
-from .exceptions import AttributeNotFoundError, LookupNotFoundError, RelationshipResolverError
-from .filterset import SQLAlchemyFilterSet
-from .registry import LookupRegistry, default_registry
-from .resolver import RelationshipResolver, ResolvedPath
+from alchemy_filterset.exceptions import (
+    AttributeNotFoundError,
+    LookupNotFoundError,
+    RelationshipResolverError,
+)
+from alchemy_filterset.filterset import SQLAlchemyFilterSet
+from alchemy_filterset.registry import LookupRegistry, default_registry
+from alchemy_filterset.resolver import RelationshipResolver, ResolvedPath
 
 __all__ = (
     "AttributeNotFoundError",

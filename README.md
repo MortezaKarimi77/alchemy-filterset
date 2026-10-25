@@ -58,7 +58,7 @@ from my_app.models import Province
 class ProvinceFilter(SQLAlchemyFilterSet):
     # 1. Bind to your SQLAlchemy Model
     model_cls = Province
-    
+
     # 2. Define fields for global search (?search=...)
     search_fields = {"name", "country__name", "country__code"}
 
@@ -66,7 +66,7 @@ class ProvinceFilter(SQLAlchemyFilterSet):
     name__icontains: str | None = None
     population__gt: int | None = None
     is_active: bool | None = None
-    
+
     # 4. Filter across relationships seamlessly!
     country__id: UUID | None = None
     country__code__in: list[str] | None = None
@@ -80,15 +80,15 @@ Pass the query parameters to the FilterSet, call `to_statement_filters()`, and p
 # Example using FastAPI/Litestar dependency injection
 @app.get("/provinces")
 async def get_provinces(
-    filters: ProvinceFilter = Depends(), 
+    filters: ProvinceFilter = Depends(),
     repo: ProvinceRepository = Depends()
 ):
     # 1. Translate Pydantic model to SQLAlchemy expressions
     sql_filters = filters.to_statement_filters()
-    
+
     # 2. Pass them to Advanced Alchemy repository
     provinces = await repo.get_many(*sql_filters)
-    
+
     return provinces
 ```
 
@@ -125,10 +125,10 @@ This dynamically translates to `!=`, `NOT IN`, or `NOT EXISTS` in SQL.
 ```python
 class UserFilter(SQLAlchemyFilterSet):
     model_cls = User
-    
+
     # Simple Negation (e.g., status != 'banned')
     not__status: str | None = None
-    
+
     # Nested Negation (Users who DO NOT have a specific role)
     not__roles__name__icontains: str | None = None
 
@@ -150,7 +150,7 @@ You don't need to write complex `JOIN`s or `EXISTS` subqueries manually. Just ch
 ```python
 class CityFilter(SQLAlchemyFilterSet):
     model_cls = City
-    
+
     # City -> Province -> Country -> name
     province__country__name__icontains: str | None = None
 ```
@@ -194,6 +194,33 @@ You can also order by a field on a related model:
 >
 > Unknown or misspelled field names passed in `ordering` are silently ignored rather than raising an error.
 
+#### Controlling where `NULL` values appear
+
+Databases disagree on where `NULL` sorts: PostgreSQL puts NULLs last for `ASC` and first for `DESC`, while MySQL and SQLite do the opposite. To get the same result everywhere, say it explicitly.
+
+**Per field**, by adding `:nulls_first` or `:nulls_last` in the query string:
+
+```text
+GET /articles?ordering=-published_at:nulls_last,title
+```
+
+**Per FilterSet**, by setting a default for every ordered field:
+
+```python
+class ArticleFilterSet(SQLAlchemyFilterSet):
+    model_cls = Article
+    default_nulls = "last"
+```
+
+- An explicit `:nulls_first` / `:nulls_last` overrides `default_nulls`.
+- Modifiers are case-insensitive.
+- An ordering entry with an unknown modifier (for example `published_at:nulls_lst`) is ignored completely, just like an unknown field.
+- Requires `advanced-alchemy>=1.12.0`.
+
+> **Note:** The `:nulls_*` query syntax is experimental and may change if Advanced Alchemy ships its own filtering API.
+
+> **Tip (PostgreSQL):** `DESC NULLS LAST` and `ASC NULLS FIRST` need a matching index to avoid an extra sort on large tables, for example `Index("ix_article_published_at", Article.published_at.desc().nulls_last())`.
+
 ### 6. Pagination Control
 
 Pagination is enabled by default. If the user does not provide `page` or `page_size`, the defaults are used.
@@ -201,10 +228,10 @@ Pagination is enabled by default. If the user does not provide `page` or `page_s
 ```python
 class HeavyReportFilter(SQLAlchemyFilterSet):
     model_cls = Report
-    
+
     # Customize pagination limits per class
     default_page_size = 10
-    max_page_size = 50 
+    max_page_size = 50
 ```
 
 **Disabling Pagination:**
@@ -223,7 +250,7 @@ Need complex logic that doesn't fit standard lookups? Write a custom method! Nam
 ```python
 class UserFilter(SQLAlchemyFilterSet):
     model_cls = User
-    
+
     has_avatar: bool | None = None
 
     def filter_has_avatar(self, value: bool):

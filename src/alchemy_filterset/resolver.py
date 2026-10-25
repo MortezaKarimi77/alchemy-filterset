@@ -5,7 +5,7 @@ from sqlalchemy import ColumnElement
 from sqlalchemy.ext.associationproxy import AssociationProxyInstance
 from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute
 
-from . import exceptions
+from alchemy_filterset import exceptions
 
 type QueryableAttribute = InstrumentedAttribute[tp.Any] | AssociationProxyInstance[tp.Any] | ColumnElement[tp.Any]
 

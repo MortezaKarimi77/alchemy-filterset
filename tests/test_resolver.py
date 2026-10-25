@@ -3,7 +3,10 @@ import typing as tp
 import pytest
 import sqlalchemy.orm as so
 
-from alchemy_filterset.exceptions import AttributeNotFoundError, RelationshipResolverError
+from alchemy_filterset.exceptions import (
+    AttributeNotFoundError,
+    RelationshipResolverError,
+)
 from alchemy_filterset.resolver import RelationshipResolver
 from tests.conftest import City, CityTag, Country, Province, Tag
 

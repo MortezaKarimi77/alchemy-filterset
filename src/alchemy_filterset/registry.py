@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 
 import sqlalchemy as sa
 
-from .exceptions import LookupNotFoundError
+from alchemy_filterset.exceptions import LookupNotFoundError
 
 type FilterBuilder = tp.Callable[[tp.Any, tp.Any], sa.ColumnElement[bool]]
 

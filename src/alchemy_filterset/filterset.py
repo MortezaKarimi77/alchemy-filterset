@@ -5,9 +5,14 @@ from advanced_alchemy import filters
 from sqlalchemy import ColumnElement, or_
 from sqlalchemy.orm import DeclarativeBase
 
-from . import exceptions
-from .registry import LookupRegistry, default_registry
-from .resolver import RelationshipResolver
+from alchemy_filterset import exceptions
+from alchemy_filterset.registry import LookupRegistry, default_registry
+from alchemy_filterset.resolver import RelationshipResolver
+
+_NULLS_MODIFIERS: tp.Final[tp.Mapping[str, tp.Literal["first", "last"]]] = {
+    "nulls_first": "first",
+    "nulls_last": "last",
+}
 
 
 class SQLAlchemyFilterSet(pyd.BaseModel):
@@ -27,6 +32,7 @@ class SQLAlchemyFilterSet(pyd.BaseModel):
     enable_pagination: tp.ClassVar[bool] = True
     default_page_size: tp.ClassVar[int] = 30
     max_page_size: tp.ClassVar[int] = 100
+    default_nulls: tp.ClassVar[tp.Literal["first", "last"] | None] = None
 
     page: int | None = pyd.Field(default=None, ge=1)
     page_size: int | None = pyd.Field(default=None, ge=1)
@@ -74,9 +80,19 @@ class SQLAlchemyFilterSet(pyd.BaseModel):
             return None
 
         ordering_filters = []
-        fields = [field.strip() for field in self.ordering.split(",") if field.strip()]
+        tokens = [token.strip() for token in self.ordering.split(",") if token.strip()]
 
-        for field in fields:
+        for token in tokens:
+            field, separator, modifier = token.partition(":")
+            nulls = self.default_nulls
+
+            if separator:
+                try:
+                    nulls = _NULLS_MODIFIERS[modifier.strip().lower()]
+                except KeyError:
+                    continue
+
+            field = field.strip()
             sort_order = "desc" if field.startswith("-") else "asc"
             clean_path = field.strip("+-")
 
@@ -86,7 +102,7 @@ class SQLAlchemyFilterSet(pyd.BaseModel):
                 continue
 
             field_to_order = tp.cast(tp.Any, resolved.target_attribute)
-            ordering_filters.append(filters.OrderBy(field_name=field_to_order, sort_order=sort_order))
+            ordering_filters.append(filters.OrderBy(field_name=field_to_order, sort_order=sort_order, nulls=nulls))
 
         return ordering_filters if ordering_filters else None
 

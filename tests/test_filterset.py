@@ -1,5 +1,7 @@
 import pytest
+import sqlalchemy as sa
 from advanced_alchemy import filters
+from sqlalchemy.dialects import postgresql
 
 from alchemy_filterset.filterset import SQLAlchemyFilterSet
 from tests.conftest import City, Province
@@ -46,6 +48,11 @@ class ConditionalCustomFilterSet(SQLAlchemyFilterSet):
         return City.population > 1000000
 
 
+class NullsLastCityFilterSet(SQLAlchemyFilterSet):
+    model_cls = City
+    default_nulls = "last"
+
+
 class TestFilterSet:
     def test_pagination_defaults(self) -> None:
         filterset = CityFilterSet()
@@ -73,11 +80,13 @@ class TestFilterSet:
         assert search_expr is not None
         compiled = str(search_expr.compile(compile_kwargs={"literal_binds": True}))
 
-        assert all((
-            " OR " in compiled,
-            "lower(CAST(city.name AS VARCHAR)) LIKE lower('%Tehran%')" in compiled,
-            "lower(CAST(province.name AS VARCHAR)) LIKE lower('%Tehran%')" in compiled,
-        ))
+        assert all(
+            (
+                " OR " in compiled,
+                "lower(CAST(city.name AS VARCHAR)) LIKE lower('%Tehran%')" in compiled,
+                "lower(CAST(province.name AS VARCHAR)) LIKE lower('%Tehran%')" in compiled,
+            )
+        )
 
     def test_search_ignores_invalid_search_field(self) -> None:
         filterset = BadSearchFilterSet(search="Tehran")
@@ -123,13 +132,15 @@ class TestFilterSet:
 
         assert ordering_filters is not None
 
-        assert all((
-            len(ordering_filters) == 2,
-            ordering_filters[0].field_name is City.population,
-            ordering_filters[0].sort_order == "desc",
-            ordering_filters[1].field_name is Province.name,
-            ordering_filters[1].sort_order == "asc",
-        ))
+        assert all(
+            (
+                len(ordering_filters) == 2,
+                ordering_filters[0].field_name is City.population,
+                ordering_filters[0].sort_order == "desc",
+                ordering_filters[1].field_name is Province.name,
+                ordering_filters[1].sort_order == "asc",
+            )
+        )
 
     def test_ordering_ignores_invalid_field(self) -> None:
         filterset = CityFilterSet(ordering="name,invalid_field,-population")
@@ -139,6 +150,99 @@ class TestFilterSet:
         assert len(ordering_filters) == 2
         assert ordering_filters[0].field_name is City.name
         assert ordering_filters[1].field_name is City.population
+
+    @pytest.mark.parametrize(
+        argnames=("ordering", "sort_order", "nulls"),
+        argvalues=(
+            ("population", "asc", None),
+            ("-population", "desc", None),
+            ("population:nulls_first", "asc", "first"),
+            ("population:nulls_last", "asc", "last"),
+            ("-population:nulls_first", "desc", "first"),
+            ("-population:nulls_last", "desc", "last"),
+            ("-population:NULLS_LAST", "desc", "last"),
+            (" -population : nulls_last ", "desc", "last"),
+        ),
+    )
+    def test_ordering_nulls_modifier(self, ordering: str, sort_order: str, nulls: str | None) -> None:
+        ordering_filters = CityFilterSet(ordering=ordering)._build_ordering_filters()
+
+        assert ordering_filters is not None
+        assert all(
+            (
+                len(ordering_filters) == 1,
+                ordering_filters[0].field_name is City.population,
+                ordering_filters[0].sort_order == sort_order,
+                ordering_filters[0].nulls == nulls,
+            )
+        )
+
+    @pytest.mark.parametrize(
+        argnames="ordering",
+        argvalues=(
+            "population:nulls_lst",
+            "population:",
+            "population:last",
+            "population:nulls_last:extra",
+        ),
+    )
+    def test_ordering_ignores_invalid_nulls_modifier(self, ordering: str) -> None:
+        assert CityFilterSet(ordering=ordering)._build_ordering_filters() is None
+
+    def test_ordering_invalid_nulls_modifier_keeps_other_fields(self) -> None:
+        filterset = CityFilterSet(ordering="name,population:bogus,-id:nulls_last")
+        ordering_filters = filterset._build_ordering_filters()
+
+        assert ordering_filters is not None
+        assert all(
+            (
+                len(ordering_filters) == 2,
+                ordering_filters[0].field_name is City.name,
+                ordering_filters[0].nulls is None,
+                ordering_filters[1].field_name is City.id,
+                ordering_filters[1].sort_order == "desc",
+                ordering_filters[1].nulls == "last",
+            )
+        )
+
+    def test_default_nulls_applies_without_modifier(self) -> None:
+        filterset = NullsLastCityFilterSet(ordering="-population,name")
+        ordering_filters = filterset._build_ordering_filters()
+
+        assert ordering_filters is not None
+        assert all(
+            (
+                len(ordering_filters) == 2,
+                ordering_filters[0].nulls == "last",
+                ordering_filters[1].nulls == "last",
+            )
+        )
+
+    def test_explicit_nulls_modifier_overrides_default_nulls(self) -> None:
+        filterset = NullsLastCityFilterSet(ordering="-population:nulls_first,name")
+        ordering_filters = filterset._build_ordering_filters()
+
+        assert ordering_filters is not None
+        assert all(
+            (
+                len(ordering_filters) == 2,
+                ordering_filters[0].nulls == "first",
+                ordering_filters[1].nulls == "last",
+            )
+        )
+
+    def test_invalid_nulls_modifier_does_not_fall_back_to_default_nulls(self) -> None:
+        filterset = NullsLastCityFilterSet(ordering="-population:bogus")
+        assert filterset._build_ordering_filters() is None
+
+    def test_nulls_placement_reaches_postgresql_sql(self) -> None:
+        ordering_filters = CityFilterSet(ordering="-population:nulls_last")._build_ordering_filters()
+        assert ordering_filters is not None
+
+        statement = ordering_filters[0].append_to_statement(sa.select(City), City)
+        compiled = str(statement.compile(dialect=postgresql.dialect()))
+
+        assert "DESC NULLS LAST" in compiled
 
     def test_empty_search_and_ordering(self) -> None:
         filterset = CityFilterSet(search="   ", ordering="  ")
